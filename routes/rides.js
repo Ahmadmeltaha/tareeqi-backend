@@ -322,8 +322,6 @@ router.get("/", authenticateToken, async (req, res) => {
       paramCount++;
     }
 
-    query += " ORDER BY r.departure_time ASC";
-
     // Get total count before pagination (for pagination metadata)
     const countQuery = query.replace(
       /SELECT r\.\*[\s\S]*?FROM rides r/,
@@ -332,7 +330,8 @@ router.get("/", authenticateToken, async (req, res) => {
     const countResult = await db.query(countQuery, params);
     const totalCount = parseInt(countResult.rows[0]?.total || 0);
 
-    // Add pagination
+    // Add ordering and pagination
+    query += ` ORDER BY r.departure_time ASC`;
     query += ` LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
     params.push(limitNum, offset);
 
