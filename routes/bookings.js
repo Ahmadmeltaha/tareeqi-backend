@@ -88,9 +88,9 @@ router.post('/', authenticateToken, async (req, res) => {
       [ride_id, req.user.id]
     );
 
-    // Total price = (price per seat * seats) + traffic fee (if any)
-    const traffic_fee = parseFloat(ride.traffic_fee) || 0;
-    const total_price = (ride.price_per_seat * seats_booked) + traffic_fee;
+    // Total price = price per seat * seats booked
+    // Note: price_per_seat already includes peak hour fee (calculated when ride was created)
+    const total_price = parseFloat(ride.price_per_seat) * seats_booked;
     const client = await db.pool.connect();
 
     try {
@@ -323,10 +323,10 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!status || !['confirmed', 'cancelled', 'completed'].includes(status)) {
+    if (!status || !['confirmed', 'rejected', 'cancelled', 'completed'].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Valid status is required (confirmed, cancelled, completed)'
+        message: 'Valid status is required (confirmed, rejected, cancelled, completed)'
       });
     }
 
@@ -364,12 +364,21 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
+    if (status === 'rejected' && !isDriver) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the driver can reject bookings'
+      });
+    }
+
     const client = await db.pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      if (status === 'cancelled' && booking.status !== 'cancelled') {
+      // Restore seats when booking is cancelled or rejected (if not already in that state)
+      if ((status === 'cancelled' || status === 'rejected') &&
+          booking.status !== 'cancelled' && booking.status !== 'rejected') {
         await client.query(
           'UPDATE rides SET available_seats = available_seats + $1 WHERE id = $2',
           [booking.seats_booked, booking.ride_id]

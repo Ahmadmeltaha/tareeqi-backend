@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS users CASCADE;
 
 -- Create enum types
 CREATE TYPE user_role AS ENUM ('driver', 'passenger', 'both');
-CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'cancelled', 'completed');
+CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'rejected', 'cancelled', 'completed');
 CREATE TYPE ride_status AS ENUM ('scheduled', 'in_progress', 'completed', 'cancelled');
 
 -- Users table
