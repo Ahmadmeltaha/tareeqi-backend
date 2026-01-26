@@ -14,7 +14,7 @@ const { validateRegistration, validateLogin } = require("../utils/validators");
 // Rate limiting for authentication routes to prevent brute force attacks
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 100 : 5, // Higher limit in development
+  max: process.env.NODE_ENV === 'development' ? 100 : 50, // Higher limit in development
   message: {
     success: false,
     message:
