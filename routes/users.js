@@ -91,42 +91,52 @@ router.put("/profile", authenticateToken, async (req, res) => {
 
 // DELETE /api/users/profile - Delete (deactivate) current user's account
 router.delete("/profile", authenticateToken, async (req, res) => {
-  try {
+ try {
     const client = await db.pool.connect();
 
     try {
       await client.query("BEGIN");
 
-      // Cancel all pending/confirmed bookings for this user
-      await client.query(
-        "UPDATE bookings SET status = 'cancelled' WHERE passenger_id = $1 AND status IN ('pending', 'confirmed')",
-        [req.user.id]
-      );
-
-      // Cancel all scheduled rides if user is a driver
-      await client.query(
-        "UPDATE rides SET status = 'cancelled' WHERE driver_id = $1 AND status = 'scheduled'",
-        [req.user.id]
-      );
-
-      // Cancel bookings on the driver's rides
-      await client.query(
-        `UPDATE bookings SET status = 'cancelled'
-         WHERE ride_id IN (SELECT id FROM rides WHERE driver_id = $1)
-         AND status IN ('pending', 'confirmed')`,
-        [req.user.id]
-      );
-
-      // Deactivate the user account
-      await client.query("UPDATE users SET is_active = FALSE WHERE id = $1", [
+      // 1. Delete reviews BY this user (as reviewer)
+      await client.query("DELETE FROM reviews WHERE reviewer_id = $1", [
         req.user.id,
       ]);
+
+      // 2. Delete reviews FOR this user (as reviewee/driver)
+      await client.query("DELETE FROM reviews WHERE reviewee_id = $1", [
+        req.user.id,
+      ]);
+
+      // 3. Delete bookings for this user's rides (if driver)
+      await client.query(
+        `DELETE FROM bookings 
+         WHERE ride_id IN (SELECT id FROM rides WHERE driver_id = $1)`,
+        [req.user.id],
+      );
+
+      // 4. Delete this user's bookings (as passenger)
+      await client.query("DELETE FROM bookings WHERE passenger_id = $1", [
+        req.user.id,
+      ]);
+
+      // 5. Delete this user's rides (if driver)
+      await client.query("DELETE FROM rides WHERE driver_id = $1", [
+        req.user.id,
+      ]);
+
+      // 6. Delete driver profile (if exists)
+      await client.query("DELETE FROM driver_profiles WHERE user_id = $1", [
+        req.user.id,
+      ]);
+
+      // 7. Finally delete the user
+      await client.query("DELETE FROM users WHERE id = $1", [req.user.id]);
 
       await client.query("COMMIT");
 
       res.json({
         success: true,
-        message: "Account deleted successfully",
+        message: "Account permanently deleted",
       });
     } catch (error) {
       await client.query("ROLLBACK");
@@ -296,24 +306,5 @@ router.put(
     }
   }
 );
-
-router.delete("/:id", authenticateToken, authorizeSelf, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    await db.query("UPDATE users SET is_active = FALSE WHERE id = $1", [id]);
-
-    res.json({
-      success: true,
-      message: "Account deactivated successfully",
-    });
-  } catch (error) {
-    console.error("Deactivate user error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-});
 
 module.exports = router;
